@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Template to create basic infrastructure components that include Route53
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Route53 Configuration
+        Parameters:
+          - EnvironmentName
+          - EnvironmentType
+
+Parameters:
+  ########################
+  ###     ROUTE 53     ###
+  ########################
+  DomainName:
+    Description: Name of the Route53 hosted zone.
+    Type: String
+    Default: apps.test001.io
+  VpcId:
+    Description: Name of the Route53 hosted zone.
+    Type: String
+  HostedZoneType:
+    Type: String
+    Default: public
+    AllowedValues:
+      - public
+      - private
+    Description: Route53 hosted zone type (public or private). Default is public.
+
+Conditions:
+  Route53Public: !Equals [!Ref HostedZoneType, public]
+  Route53Private: !Equals [!Ref HostedZoneType, private]
+
+Resources:
+  DNS:
+    Type: Test001::Route53::Zone::MODULE
+    Properties:
+      DomainName: !Ref DomainName
+      HostedZoneType: !Ref HostedZoneType
+      VpcId: !Ref VpcId
+
+Outputs:
+  DNSPublic:
+    Description: Route53 Hosted Zone ID (Public)
+    Condition: Route53Public
+    Value: !Ref DNS.Route53Public
+    Export:
+      Name: !Sub "${AWS::StackName}-DNS"
+  DNSPrivate:
+    Description: Route53 Hosted Zone ID (Private)
+    Condition: Route53Private
+    Value: !Ref DNS.Route53Private
+    Export:
+      Name: !Sub "${AWS::StackName}-DNS"
+  DNSName:
+    Description: Route53 Hosted Zone Name
+    Value: !Ref DomainName
+    Export:
+      Name: !Sub "${AWS::StackName}-DNSName"
+  ACMCertificate:
+    Description: Route53 Hosted Zone Name
+    Value: !Ref DNS.ACMCertificate
+    Export:
+      Name: !Sub "${AWS::StackName}-ACMCertificate"

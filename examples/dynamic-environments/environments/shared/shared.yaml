@@ -1,0 +1,262 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Template to create basic infrastructure components that include VPC, ALB, RDS, ElastiCache
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General
+        Parameters:
+          - EnvironmentName
+          - Route53StackName
+      - Label:
+          default: Availability Configuration
+        Parameters:
+          - AvailabilityZones
+          - NumberOfAZs
+      - Label:
+          default: VPC Configuration
+        Parameters:
+          - VPCCIDR
+          - PublicSubnetCIDR
+          - PrivateSubnetCIDR
+          - DatabaseSubnetCIDR
+      - Label:
+          default: RDS Configuration
+        Parameters:
+          - DBName
+          - DBUser
+          - DBPassword
+          - AllocatedStorage
+          - MaxAllocatedStorage
+          - DBInstanceClass
+      - Label:
+          default: ALB Configuration
+        Parameters:
+          - ELBIdentifier
+          - ELBType
+          - ELBScheme
+Parameters:
+  ########################
+  ###      GENERAL     ###
+  ########################
+  EnvironmentName:
+    Description: Name of environment to deploy
+    Type: String
+    Default: "shared"
+  AvailabilityZones:
+    Description: "List of Availability Zones to use for the subnets in the VPC. Note: The logical order is preserved."
+    Type: List<AWS::EC2::AvailabilityZone::Name>
+    Default: "us-west-2a, us-west-2b"
+  NumberOfAZs:
+    Description: Number of Availability Zones to use in the VPC. This must match your selections in the list of Availability Zones parameter.
+    Type: Number
+    AllowedValues: [1, 2, 3]
+    Default: 2
+  Route53StackName:
+    Description: The name of the shared stack, where shared resources (ALB, RDS, Redis, VPC, etc.) have been created.
+    Type: String
+    Default: test001-shared-route53-public-apps
+  ########################
+  ###        VPC       ###
+  ########################
+  VPCCIDR:
+    Description: CIDR block for the VPC
+    Type: String
+    AllowedPattern: ^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/(1[6-9]|2[0-8]))$
+    ConstraintDescription: CIDR block parameter must be in the form x.x.x.x/16-28
+    Default: 10.0.0.0/16
+  PublicSubnetCIDR:
+    Description: CIDR blocks for public subnets
+    Type: CommaDelimitedList
+    Default: "10.0.0.0/20, 10.0.16.0/20, 10.0.32.0/20"
+  PrivateSubnetCIDR:
+    Description: CIDR blocks for public subnets
+    Type: CommaDelimitedList
+    Default: "10.0.64.0/20, 10.0.80.0/20, 10.0.96.0/20"
+  DatabaseSubnetCIDR:
+    Description: CIDR blocks for public subnets
+    Type: CommaDelimitedList
+    Default: "10.0.128.0/20, 10.0.144.0/20, 10.0.160.0/20"
+  ########################
+  ###        RDS       ###
+  ########################
+  DBName:
+    Description: The database name
+    Type: String
+    MinLength: "1"
+    MaxLength: "64"
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9]*"
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+    Default: "initdb"
+  # DBUser:
+  #   Description: The database admin account username
+  #   Type: String
+  #   MinLength: '1'
+  #   MaxLength: '16'
+  #   NoEcho: 'true'
+  #   AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+  #   ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  #   Default: test
+  # DBPassword:
+  #   Description: The database admin account password
+  #   Type: String
+  #   NoEcho: 'true'
+  #   MinLength: '8'
+  #   MaxLength: '41'
+  #   Default: test12345678 # To-do: secure/hide the value.
+  AllocatedStorage:
+    Description: The min storage to create the RDS with.
+    Type: Number
+    Default: 20
+  MaxAllocatedStorage:
+    Description: The maximum storage RDS will be able to scale out to.
+    Type: Number
+    Default: 100
+  DBInstanceClass:
+    Description: The size/type of the DB instance.
+    Type: String
+    Default: db.t3.micro
+    AllowedValues:
+      - db.t3.micro
+      - db.t3.small
+      - db.t3.medium
+  ########################
+  ###        ALB       ###
+  ########################
+  ELBIdentifier:
+    Description: A name for the ELB.
+    Type: String
+    Default: alb
+  ELBType:
+    Description: The type of load balancer. Allowed values are application, gateway, network
+    Type: String
+    Default: application
+  ELBScheme:
+    Description: Availability type. Allowed values are internal, internet-facing
+    Type: String
+    Default: internet-facing
+  ########################
+  ###       REDIS      ###
+  ########################
+  EngineVersion:
+    Description: Version of Redis.\
+    Type: String
+    Default: 5.0.6
+  CacheNodeType:
+    Description: The compute and memory capacity of the nodes in the node group (shard).
+    Type: String
+    Default: cache.t3.small
+    AllowedValues:
+      - cache.t3.micro
+      - cache.t3.small
+      - cache.t3.medium
+  NumCacheClusters:
+    Description: The number of clusters this replication group initially has.
+    Type: Number
+    Default: 1
+
+Resources:
+  VPC:
+    Type: Test001::VPC::Network::MODULE
+    Properties:
+      EnvironmentName: !Ref EnvironmentName
+      AvailabilityZones: !Ref AvailabilityZones
+      NumberOfAZs: !Ref NumberOfAZs
+      VPCCIDR: !Ref VPCCIDR
+      PublicSubnetCIDR: !Ref PublicSubnetCIDR
+      PrivateSubnetCIDR: !Ref PrivateSubnetCIDR
+      DatabaseSubnetCIDR: !Ref DatabaseSubnetCIDR
+  DB:
+    Type: Test001::RDS::MYSQL::MODULE
+    Properties:
+      EnvironmentName: !Ref EnvironmentName
+      NumberOfAZs: !Ref NumberOfAZs
+      DBName: !Ref DBName
+      DBUser: !Ref DBUser
+      DBPassword: !Ref DBPassword
+      AllocatedStorage: !Ref AllocatedStorage
+      MaxAllocatedStorage: !Ref MaxAllocatedStorage
+      DBInstanceClass: !Ref DBInstanceClass
+      DBVpcId: !Ref VPC.VPC
+      DBSubnet1: !Ref VPC.DatabaseSubnet1
+      DBSubnet2: !Ref VPC.DatabaseSubnet2
+      DBSubnet3: !Ref VPC.DatabaseSubnet3
+      # SourceSecurityGroupId: 'sg-056a87e4ac99d81a7' # Change to EC2 Security Group
+  ALB:
+    Type: Test001::EC2::ALB::MODULE
+    Properties:
+      EnvironmentName: !Ref EnvironmentName
+      ELBIdentifier: !Ref ELBIdentifier
+      Type: !Ref ELBType
+      Scheme: !Ref ELBScheme
+      VpcId: !Ref VPC.VPC
+      PublicSubnet1: !Ref VPC.PublicSubnet1
+      PublicSubnet2: !Ref VPC.PublicSubnet2
+      ExistingACMSSLArn:
+        Fn::ImportValue:
+          Fn::Sub: "${Route53StackName}-ACMCertificate"
+      Route53HostedZoneName:
+        Fn::ImportValue:
+          Fn::Sub: "${Route53StackName}-DNSName"
+      Route53HostedZoneId:
+        Fn::ImportValue:
+          Fn::Sub: "${Route53StackName}-DNS"
+  Redis:
+    Type: Test001::ElastiCache::Redis::MODULE
+    Properties:
+      EnvironmentName: !Ref EnvironmentName
+      NumberOfAZs: !Ref NumberOfAZs
+      EngineVersion: !Ref EngineVersion
+      CacheNodeType: !Ref CacheNodeType
+      NumCacheClusters: !Ref NumCacheClusters
+      VpcId: !Ref VPC.VPC
+      PrivateSubnet1: !Ref VPC.PrivateSubnet1
+      PrivateSubnet2: !Ref VPC.PrivateSubnet2
+      # SourceSecurityGroupId: 'sg-056a87e4ac99d81a7' # Change to EC2 Security Group
+
+Outputs:
+  HTTPSListenerArn:
+    Description: ARN of ALB HTTPS Listener
+    Value: !Ref ALB.ListenerHTTPS
+    Export:
+      Name: !Sub "${AWS::StackName}-HTTPSListenerArn"
+  VPCID:
+    Description: VPC ID
+    Value: !Ref VPC.VPC
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCID"
+  VPCPrivateSubnets2:
+    Description: Comma-separated list of private subnets
+    Value: !Join [",", [!Ref VPC.PrivateSubnet1, !Ref VPC.PrivateSubnet2]]
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCPrivateSubnets"
+  VPCPublicSubnets2:
+    Description: Comma-separated list of public subnets
+    Value: !Join [",", [!Ref VPC.PublicSubnet1, !Ref VPC.PublicSubnet2]]
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCPublicSubnets"
+  VPCPublicSubnet1:
+    Description: Comma-separated list of public subnets
+    Value: !Ref VPC.PublicSubnet1
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCPublicSubnet1"
+  RDSSecurityGroup:
+    Description: RDS Security Group ID
+    Value: !Ref DB.RDSSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-RDSSecurityGroup"
+  RedisSecurityGroup:
+    Description: Redis Security Group ID
+    Value: !Ref Redis.SecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-RedisSecurityGroup"
+  RDSEndpointURL:
+    Description: RDS Endpoint URL
+    Value: !GetAtt DB.RDSInstance.Endpoint.Address
+    Export:
+      Name: !Sub "${AWS::StackName}-RDSEndpointURL"
+  RDSInstance:
+    Description: RDS Endpoint ID
+    Value: !Ref DB.RDSInstance
+    Export:
+      Name: !Sub "${AWS::StackName}-RDSInstance"

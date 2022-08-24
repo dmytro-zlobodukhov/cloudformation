@@ -1,0 +1,23 @@
+# OS Specific files and folders
+.DS_Store
+
+# IDE Specific files and folders
+.idea/
+.vscode/
+
+# Log files
+**/*.log
+**/*.log.*
+*.log
+*.log.*
+
+# # README.md files (ignored temporarily)
+# **/README.md
+# README.md
+
+# # *.sh files (ignored temporarily)
+# **/*.sh
+# *.sh
+
+# # docs (ignored temporarily)
+# **/docs/*

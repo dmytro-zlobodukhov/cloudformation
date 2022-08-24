@@ -1,0 +1,78 @@
+{
+    "typeName": "Test001::ECR::Registry::MODULE",
+    "description": "Schema for Module Fragment of type Test001::ECR::Registry::MODULE",
+    "properties": {
+        "Parameters": {
+            "type": "object",
+            "properties": {
+                "EnvironmentName": {
+                    "type": "object",
+                    "properties": {
+                        "Type": {
+                            "type": "string"
+                        },
+                        "Description": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "Type",
+                        "Description"
+                    ],
+                    "description": "Name of the environment to deploy (dev, test, prod, develop, research, etc.)."
+                },
+                "EnvironmentType": {
+                    "type": "object",
+                    "properties": {
+                        "Type": {
+                            "type": "string"
+                        },
+                        "Description": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "Type",
+                        "Description"
+                    ],
+                    "description": "Type of the environment to deploy (shared, owned, dedicated, etc.)."
+                },
+                "AppName": {
+                    "type": "object",
+                    "properties": {
+                        "Type": {
+                            "type": "string"
+                        },
+                        "Description": {
+                            "type": "string"
+                        }
+                    },
+                    "required": [
+                        "Type",
+                        "Description"
+                    ],
+                    "description": "Name of the application to deploy (frontend, backend-nginx, backend-fpm, etc.)."
+                }
+            }
+        },
+        "Resources": {
+            "properties": {
+                "ECRRepository": {
+                    "type": "object",
+                    "properties": {
+                        "Type": {
+                            "type": "string",
+                            "const": "AWS::ECR::Repository"
+                        },
+                        "Properties": {
+                            "type": "object"
+                        }
+                    }
+                }
+            },
+            "type": "object",
+            "additionalProperties": false
+        }
+    },
+    "additionalProperties": true
+}

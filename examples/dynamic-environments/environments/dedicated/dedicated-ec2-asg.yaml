@@ -1,0 +1,181 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Template to create basic infrastructure components that include EC2 dedicated environment host
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General
+        Parameters:
+          - EnvironmentName
+          - EnvironmentType
+          - SharedStackName
+          - Route53StackName
+      - Label:
+          default: VPC Configuration
+        Parameters:
+          - VpcId
+          - VPCSubnetIDs
+      - Label:
+          default: ALB Configuration
+        Parameters:
+          - ALBListenerARN
+          - ALBListenerRulePriority
+          # - Route53HostedZoneName
+      - Label:
+          default: EC2 Configuration
+        Parameters:
+          - InstanceName
+          - InstanceType
+          - InstanceStorageType
+          - InstanceStorageSize
+          - InstanceOS
+          - SSHKey
+      - Label:
+          default: EC2 ASG Configuration
+        Parameters:
+          - ASGMaxSize
+          - ASGMinSize
+          - ASGDesiredCapacity
+Parameters:
+  ########################
+  ###      GENERAL     ###
+  ########################
+  EnvironmentName:
+    Description: Name of the environment to deploy (dev, test, prod, develop, research, etc.).
+    Type: String
+  EnvironmentType:
+    Description: Type of the environment to deploy (shared, owned, dedicated, etc.).
+    Type: String
+    Default: dedicated
+  SharedStackName:
+    Description: The name of the shared infra stack, where shared resources (ALB, RDS, Redis, VPC, etc.) have been created.
+    Type: String
+    Default: test001-shared-infra
+  Route53StackName:
+    Description: The name of the DNS stack, where shared resources (Route53) have been created.
+    Type: String
+    Default: test001-shared-route53-public-apps
+  ########################
+  ###        ALB       ###
+  ########################
+  # Route53HostedZoneName:
+  #   Description: "Name of the Route53 hosted zone"
+  #   Type: String
+  ALBListenerRulePriority:
+    Description: "Priority of the ALB listener rule"
+    Type: String
+    # Default: 10
+  ########################
+  ###        EC2       ###
+  ########################
+  InstanceName:
+    Description: Name of the EC2 Instance to deploy.
+    Type: String
+    Default: web
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+    Description: EC2 Instance type/size. Default is t3.micro.
+  InstanceStorageType:
+    Type: String
+    Default: gp3
+    AllowedValues:
+      - gp3
+      - gp2
+      - io1
+      - io2
+    Description: "Type of the attached EBS volume. Default is gp3."
+  InstanceStorageSize:
+    Type: String
+    Default: 10
+    Description: "The size of the attached EBS volume. Default is 10 GB."
+  InstanceOS:
+    Type: String
+    Default: Ubuntu1804
+    AllowedValues:
+      - Ubuntu1804
+      - Ubuntu2004
+    Description: "Desired Operating System. Default is Ubuntu 18.04."
+  SSHKey:
+    Type: String
+    Default: test001
+    Description: The SSH key used to access the instance.
+  ########################
+  ###      EC2 ASG     ###
+  ########################
+  ASGMaxSize:
+    Description: "Enter the Max Size for the ASG"
+    Type: String
+    Default: 1
+  ASGMinSize:
+    Description: "Enter the Min Size for the ASG"
+    Type: String
+    Default: 1
+  ASGDesiredCapacity:
+    Description: "Enter the desired capacity for the ASG"
+    Type: String
+    Default: 1
+
+Resources:
+  EC2:
+    Type: Test001::EC2::InstanceASG::MODULE
+    Properties:
+      EnvironmentName: !Ref EnvironmentName
+      EnvironmentType: !Ref EnvironmentType
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-VPCID"
+      VPCSubnetIDs:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-VPCPrivateSubnets"
+      ALBListenerARN:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-HTTPSListenerArn"
+      ALBListenerRulePriority: !Ref ALBListenerRulePriority
+      InstanceName: !Ref InstanceName
+      InstanceType: !Ref InstanceType
+      InstanceStorageType: !Ref InstanceStorageType
+      InstanceStorageSize: !Ref InstanceStorageSize
+      InstanceOS: !Ref InstanceOS
+      SSHKey: !Ref SSHKey
+      ASGMaxSize: !Ref ASGMaxSize
+      ASGMinSize: !Ref ASGMinSize
+      ASGDesiredCapacity: !Ref ASGDesiredCapacity
+      Route53HostedZoneName:
+        Fn::ImportValue:
+          Fn::Sub: "${Route53StackName}-DNSName"
+      RDSInstance:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-RDSInstance"
+      RDSEndpointURL:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-RDSEndpointURL"
+      RDSSecurityGroupId:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-RDSSecurityGroup"
+      RedisSecurityGroupId:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-RedisSecurityGroup"
+  ECRFrontend:
+    Type: Test001::ECR::Registry::MODULE
+    Properties:
+      EnvironmentName: !Ref EnvironmentName
+      EnvironmentType: !Ref EnvironmentType
+      AppName: "frontend"
+  ECRBackendFpm:
+    Type: Test001::ECR::Registry::MODULE
+    Properties:
+      EnvironmentName: !Ref EnvironmentName
+      EnvironmentType: !Ref EnvironmentType
+      AppName: "backend-fpm"
+  ECRBackendNginx:
+    Type: Test001::ECR::Registry::MODULE
+    Properties:
+      EnvironmentName: !Ref EnvironmentName
+      EnvironmentType: !Ref EnvironmentType
+      AppName: "backend-nginx"

@@ -1,0 +1,601 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: This template creates EC2 Instance and related resources.
+
+# Metadata:
+#   template metadata
+
+Parameters:
+  EnvironmentName:
+    Description: Name of the environment to deploy (dev, test, prod, develop, research, etc.).
+    Type: String
+  EnvironmentType:
+    Description: Type of the environment to deploy (shared, owned, dedicated, etc.).
+    Type: String
+  VpcId:
+    Description: The VPC id to place the EC2 in.
+    Type: String
+  InstanceName:
+    Description: Name of the EC2 Instance to deploy.
+    Type: String
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+    Description: EC2 Instance type/size. Default is t3.micro.
+  InstanceStorageType:
+    Type: String
+    Default: gp3
+    AllowedValues:
+      - gp3
+      - gp2
+      - io1
+      - io2
+    Description: "Type of the attached EBS volume. Default is gp3."
+  InstanceStorageSize:
+    Type: String
+    Default: 10
+    Description: "The size of the attached EBS volume. Default is 10 GB."
+  InstanceOS:
+    Type: String
+    Default: Ubuntu1804
+    AllowedValues:
+      - Ubuntu1804
+      - Ubuntu2004
+    Description: "Desired Operating System. Default is Ubuntu 18.04."
+  SSHKey:
+    Type: String
+    Default: test001
+    Description: The SSH key used to access the instance.
+  ASGMaxSize:
+    Description: "Enter the Max Size for the ASG"
+    Type: String
+    Default: 1
+  ASGMinSize:
+    Description: "Enter the Min Size for the ASG"
+    Type: String
+    Default: 1
+  ASGDesiredCapacity:
+    Description: "Enter the desired capacity for the ASG"
+    Type: String
+    Default: 1
+  ALBListenerARN:
+    Description: "ARN of the ALB listener"
+    Type: String
+  Route53HostedZoneName:
+    Description: "Name of the Route53 hosted zone"
+    Type: String
+  ALBListenerRulePriority:
+    Description: "Priority of the ALB listener rule"
+    Type: String
+  VPCSubnetIDs:
+    Description: "List the Subnet Ids of the instances"
+    Type: String
+  RDSSecurityGroupId:
+    Description: ID of the RDS security group.
+    Type: String
+  RDSInstance:
+    Description: RDS Instance ID.
+    Type: String
+  RDSEndpointURL:
+    Description: RDS Instance URL.
+    Type: String
+  RDSPort:
+    Description: Default RDS port number
+    Type: String
+    Default: 3306
+  RedisSecurityGroupId:
+    Description: ID of the Redis security group.
+    Type: String
+  RedisPort:
+    Description: Default Redis port number
+    Type: String
+    Default: 6379
+  # LoadBalancerName:
+  #   Description: Name of the ALB to associate ASG with.
+  #   Type: String
+
+# Rules:
+#   set of rules
+
+Mappings:
+  RegionAndInstanceTypeToAMIID:
+    us-east-1:
+      Ubuntu1804: "ami-0e472ba40eb589f49"
+      Ubuntu2004: "ami-04505e74c0741db8d"
+    us-east-2:
+      Ubuntu1804: "ami-03a0c45ebc70f98ea"
+      Ubuntu2004: "ami-0fb653ca2d3203ac1"
+    us-west-1:
+      Ubuntu1804: "ami-009726b835c24a3aa"
+      Ubuntu2004: "ami-01f87c43e618bf8f0"
+    us-west-2:
+      Ubuntu1804: "ami-074251216af698218"
+      Ubuntu2004: "ami-0892d3c7ee96c0bf7"
+
+# Transform:
+#   set of transforms
+
+Resources:
+  RDSInstanceSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "environments/${EnvironmentType}/rds/mysql/${EnvironmentName}"
+      GenerateSecretString:
+        SecretStringTemplate: !Sub '{"username": "${EnvironmentName}", "dbname": "${EnvironmentName}_db", "dbInstanceIdentifier": "${RDSInstance}", "host": "${RDSEndpointURL}", "port": "${RDSPort}"}'
+        GenerateStringKey: "password"
+        PasswordLength: 40
+        ExcludePunctuation: true
+        #ExcludeCharacters: '"@/!$%&()*+,;?\^`|~'
+  # RDSInstanceSecretAttachment:
+  #   Type: AWS::SecretsManager::SecretTargetAttachment
+  #   Properties:
+  #     SecretId: !Ref RDSInstanceSecret
+  #     TargetId: !Ref RDSInstance
+  #     TargetType: AWS::RDS::DBInstance
+  EC2InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "sg",
+          ],
+        ]
+      GroupDescription: "Security group for dedicated environment EC2 Instance"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3006
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8889
+          ToPort: 8893
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value:
+            !Join [
+              "-",
+              [
+                !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+                !Select [
+                  4,
+                  !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+                ],
+                "sg",
+              ],
+            ]
+
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "instance-role",
+          ],
+        ]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  EC2InstanceRolePolicySSM:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "ssm",
+          ],
+        ]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "ssm:GetParametersByPath"
+              - "ssm:GetParameters"
+              - "ssm:GetParameter"
+              - "ssm:PutParameter"
+            Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/*"
+          - Effect: Allow
+            Action:
+              - "ssm:DescribeParameters"
+            Resource: "*"
+      Roles:
+        - !Ref EC2InstanceRole
+  EC2InstanceRolePolicySecretsManager:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "secretsmanager",
+          ],
+        ]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "secretsmanager:GetSecretValue"
+              - "secretsmanager:DescribeSecret"
+              - "secretsmanager:PutSecretValue"
+              - "secretsmanager:CreateSecret"
+              - "secretsmanager:UpdateSecret"
+            Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:*"
+          - Effect: Allow
+            Action:
+              - "secretsmanager:GetRandomPassword"
+              - "secretsmanager:ListSecrets"
+            Resource: "*"
+      Roles:
+        - !Ref EC2InstanceRole
+  EC2InstanceRolePolicyS3:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "s3",
+          ],
+        ]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "s3:GetObjectAcl"
+              - "s3:GetObject"
+              - "s3:ListBucket"
+              - "s3:GetObjectVersion"
+            Resource:
+              - !Sub "arn:aws:s3:::test001-infrastructure-common/config/${EnvironmentType}/${EnvironmentName}/*"
+              - "arn:aws:s3:::test001-infrastructure-common/helpers/*"
+              - "arn:aws:s3:::test001-infrastructure-common"
+      Roles:
+        - !Ref EC2InstanceRole
+  EC2InstanceRolePolicyEcr:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "ecr",
+          ],
+        ]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "ecr:GetDownloadUrlForLayer"
+              - "ecr:BatchGetImage"
+              - "ecr:DescribeImages"
+              - "ecr:DescribeRepositories"
+              - "ecr:ListImages"
+              - "ecr:BatchCheckLayerAvailability"
+            Resource:
+              - !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/test001-${EnvironmentName}-*"
+              - !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/test001-${EnvironmentName}-*"
+              - !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/test001-base-images"
+              - !Sub "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/test001-base-images"
+          - Effect: Allow
+            Action:
+              - "ecr:DescribeRegistry"
+              - "ecr:GetAuthorizationToken"
+            Resource: "*"
+      Roles:
+        - !Ref EC2InstanceRole
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "instance-profile",
+          ],
+        ]
+      Path: /
+      Roles:
+        - !Ref EC2InstanceRole
+  EC2InstanceLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "launch-template",
+          ],
+        ]
+      LaunchTemplateData:
+        KeyName: !Ref SSHKey
+        DisableApiTermination: false
+        ImageId:
+          !FindInMap [
+            RegionAndInstanceTypeToAMIID,
+            !Ref "AWS::Region",
+            !Ref InstanceOS,
+          ]
+        InstanceType: !Ref InstanceType
+        Monitoring:
+          Enabled: false
+        EbsOptimized: true
+        InstanceMarketOptions:
+          MarketType: spot
+        IamInstanceProfile:
+          Arn: !GetAtt EC2InstanceProfile.Arn
+        SecurityGroupIds:
+          - !Ref EC2InstanceSecurityGroup
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: !Ref InstanceStorageSize
+              VolumeType: !Ref InstanceStorageType
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+
+            ###########################
+            #       ENABLE SWAP       #
+            ###########################
+            sudo dd if=/dev/zero of=/swapfile bs=128M count=16
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile
+            sudo swapon /swapfile
+            echo "/swapfile swap swap defaults 0 0" >> /etc/fstab
+
+            ###########################
+            #     SYSTEM UPGRADE      #
+            ###########################
+            sudo apt-get update && sudo apt-get upgrade -y
+            sudo apt-get install -y awscli jq python3-pip python3-setuptools
+            python3 -m pip install --upgrade pip awscli
+            python3 -m pip install ansible pymysql boto3
+            ansible-galaxy collection install amazon.aws
+
+            ###########################
+            #     SYSTEM PREPARE      #
+            ###########################
+            echo 'export ENVIRONMENT=${EnvironmentName}' | sudo tee -a /etc/profile.d/dynamic-env.sh
+            echo 'export ENVIRONMENT_TYPE=${EnvironmentType}' | sudo tee -a /etc/profile.d/dynamic-env.sh
+            source /etc/profile.d/dynamic-env.sh
+
+            ###########################
+            #     SSM AGENT INSTALL   #
+            ###########################
+            sudo snap install amazon-ssm-agent --classic
+            sudo snap start amazon-ssm-agent
+
+            ###########################
+            #     DOCKER INSTALL      #
+            ###########################
+            sudo apt-get install -y ca-certificates curl gnupg lsb-release
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg --batch --yes
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+            sudo apt-get update
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+            sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+            sudo usermod -aG docker ubuntu
+            sudo systemctl enable --now docker
+
+            sudo docker container run --publish 3001:80 --detach --name asg_placeholder_nginx nginx
+
+            ###########################
+            #     MYSQL SETUP         #
+            ###########################
+            aws s3 cp s3://test001-infrastructure-common/helpers/ansible/mysql.yaml /tmp/mysql.yaml
+            ansible-playbook --extra-vars "env_name=${EnvironmentName} env_type=${EnvironmentType}" /tmp/mysql.yaml
+  EC2InstanceASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "asg",
+          ],
+        ]
+      VPCZoneIdentifier: !Split [",", !Ref VPCSubnetIDs]
+      # AvailabilityZones: !Ref AvailabilityZones
+      LaunchTemplate:
+        LaunchTemplateId: !Ref EC2InstanceLaunchTemplate
+        Version: 1
+      MinSize: !Ref ASGMinSize
+      MaxSize: !Ref ASGMaxSize
+      DesiredCapacity: !Ref ASGDesiredCapacity
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 600
+      TargetGroupARNs:
+        - !Ref EC2TargetGroup
+      Tags:
+        - Key: Name
+          Value:
+            !Join [
+              "-",
+              [
+                !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+                !Select [
+                  4,
+                  !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+                ],
+                "instance",
+              ],
+            ]
+          PropagateAtLaunch: "true"
+        - Key: Environment
+          Value: !Ref EnvironmentName
+          PropagateAtLaunch: "true"
+        - Key: EnvironmentType
+          Value: !Ref EnvironmentType
+          PropagateAtLaunch: "true"
+
+  EC2TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 60
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: 3001
+      HealthCheckPath: /
+      HealthCheckTimeoutSeconds: 30
+      HealthyThresholdCount: 5
+      Matcher:
+        HttpCode: "200"
+      Name:
+        !Join [
+          "-",
+          [
+            !Sub "${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "tg",
+          ],
+        ]
+      Port: 3001
+      Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "20"
+      UnhealthyThresholdCount: 10
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: Name
+          Value: EC2TargetGroup
+        - Key: Port
+          Value: 3001
+
+  ALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref EC2TargetGroup
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Sub "${EnvironmentName}.${Route53HostedZoneName}"
+      ListenerArn: !Ref ALBListenerARN
+      Priority: !Ref ALBListenerRulePriority
+
+  EC2InstanceAllowAccessToRDS:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: !Sub "Allow access from ${EnvironmentName} to RDS."
+      GroupId: !Ref RDSSecurityGroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId: !GetAtt EC2InstanceSecurityGroup.GroupId
+      ToPort: !Ref RDSPort
+      FromPort: !Ref RDSPort
+  EC2InstanceAllowAccessToRedis:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: !Sub "Allow access from ${EnvironmentName} to Redis."
+      GroupId: !Ref RedisSecurityGroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId: !GetAtt EC2InstanceSecurityGroup.GroupId
+      ToPort: !Ref RedisPort
+      FromPort: !Ref RedisPort
+
+Outputs:
+  AutoscalingGroup:
+    Description: "The newly created asg"
+    Value: !Ref EC2InstanceASG
+  LaunchConfig:
+    Description: "the newly created launch config"
+    Value: !Ref EC2InstanceLaunchTemplate
+  TargetGroup:
+    Description: "The newly created TargetGroup"
+    Value: !Ref EC2TargetGroup
+  ListenerRule:
+    Description: "The newly created ListenerRule"
+    Value: !Ref ALBListenerRule

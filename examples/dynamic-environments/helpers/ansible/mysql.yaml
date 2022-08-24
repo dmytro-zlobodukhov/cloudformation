@@ -1,0 +1,28 @@
+---
+- hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  tasks:
+    - name: "Creating MySQL database"
+      community.mysql.mysql_db:
+        login_host: "{{ database_aws_secret_root.host }}"
+        login_user: "{{ database_aws_secret_root.username }}"
+        login_password: "{{ database_aws_secret_root.password }}"
+        name: "{{ env_name }}_db"
+        state: present
+      vars:
+        database_aws_secret_root: "{{ lookup('amazon.aws.aws_secret', 'DBRDSInstanceSecret-xxxxxxxxxxxx', region='us-west-2') }}"
+
+    - name: "Creating MySQL user and granting permissions"
+      community.mysql.mysql_user:
+        name: "{{ database_aws_secret_env.username }}"
+        password: "{{ database_aws_secret_env.password }}"
+        host: "%"
+        priv: "{{ env_name }}_db.*:ALL,GRANT"
+        login_host: "{{ database_aws_secret_root.host }}"
+        login_user: "{{ database_aws_secret_root.username }}"
+        login_password: "{{ database_aws_secret_root.password }}"
+      vars:
+        database_aws_secret_root: "{{ lookup('amazon.aws.aws_secret', 'DBRDSInstanceSecret-xxxxxxxxxxxx', region='us-west-2') }}"
+        database_aws_secret_env: "{{ lookup('amazon.aws.aws_secret', 'environments/' + env_type + '/rds/mysql/' + env_name, region='us-west-2') }}"

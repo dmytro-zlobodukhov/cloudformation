@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: This template creates Application Load Balancer and related resources.
+Parameters:
+  EnvironmentName:
+    Description: Name of environment to deploy.
+    Type: String
+    Default: shared
+  ELBIdentifier:
+    Description: A name for the ELB.
+    Type: String
+    Default: alb
+  VpcId:
+    Description: The VPC id to place the ELB in.
+    Type: String
+  PublicSubnet1:
+    Description: The VPC subnet to place the ALB in.
+    Type: String
+  PublicSubnet2:
+    Description: The VPC subnet to place the ALB in.
+    Type: String
+  PublicSubnet3:
+    Description: The VPC subnet to place the ALB in.
+    Type: String
+    Default: ""
+  Type:
+    Description: The type of load balancer. Allowed values are application, gateway, network
+    Type: String
+    Default: application
+  Scheme:
+    Description: Availability type. Allowed values are internal, internet-facing
+    Type: String
+    Default: internet-facing
+  ELBHTTPPort:
+    Description: Port to be used for HTTP requests.
+    Type: Number
+    Default: 80
+  ELBHTTPSPort:
+    Description: Port to be used for HTTPS requests.
+    Type: Number
+    Default: 443
+  ExistingACMSSLArn:
+    Description: ARN of an existing SSL certificate from ACM to attach to the ELB.
+    Type: String
+    Default: "arn:aws:acm:us-west-2:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+  Route53HostedZoneName:
+    Description: Route 53 Hosted Zone Name.
+    Type: String
+  Route53HostedZoneId:
+    Description: oute 53 Hosted Zone ID.
+    Type: String
+  # CommonName:
+  #   Description:
+
+#Conditions:
+#  CreateACMSSL: !Not [!Equals [!Ref ExistingACMSSLArn, "null"]]
+
+Resources:
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${ELBIdentifier}-${EnvironmentName}-001"
+      Type: !Ref Type
+      Scheme: !Ref Scheme
+      SecurityGroups:
+        - !GetAtt SecurityGroup.GroupId
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+        - !Ref PublicSubnet3
+  ListenerHTTP:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: !Ref ELBHTTPPort
+      Protocol: HTTP
+      DefaultActions:
+        - Type: "redirect"
+          RedirectConfig:
+            Protocol: "HTTPS"
+            Port: !Ref ELBHTTPSPort
+            Host: "#{host}"
+            Path: "/#{path}"
+            Query: "#{query}"
+            StatusCode: "HTTP_301"
+  ListenerHTTPS:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: !Ref ELBHTTPSPort
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref ExistingACMSSLArn
+      DefaultActions:
+        - Type: "fixed-response"
+          FixedResponseConfig:
+            StatusCode: 404
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupName: !Sub "${ELBIdentifier}-${EnvironmentName}-001"
+      GroupDescription: Allow connections to ALB
+      Tags:
+        - Key: Name
+          Value: !Sub "${ELBIdentifier}-${EnvironmentName}-001"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref ELBHTTPPort
+          ToPort: !Ref ELBHTTPPort
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: !Ref ELBHTTPSPort
+          ToPort: !Ref ELBHTTPSPort
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3006
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8889
+          ToPort: 8893
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: 0.0.0.0/0
+  Route53Record:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !Ref Route53HostedZoneId
+      #HostedZoneName: !Ref Route53HostedZoneName
+      RecordSets:
+        - Name: !Sub "*.${Route53HostedZoneName}"
+          Type: A
+          AliasTarget:
+            HostedZoneId: !GetAtt "LoadBalancer.CanonicalHostedZoneID"
+            DNSName: !GetAtt "LoadBalancer.DNSName"
+
+Outputs:
+  ELBHTTPSListenerArn:
+    Description: Arn of the ALB HTTPS listeners.
+    Value: !Ref ListenerHTTPS
+  ELBEndpoint:
+    Description: DNS name of ALB.
+    Value: !GetAtt LoadBalancer.DNSName
+  ELBName:
+    Description: Resource name of ALB.
+    Value: !Sub "${ELBIdentifier}-${EnvironmentName}-001"
+  ELBSecurityGroupId:
+    Description: Security group ID of the ELB.
+    Value: !GetAtt SecurityGroup.GroupId

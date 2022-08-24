@@ -1,0 +1,440 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: This template creates ECS cluster with EC2 Instance workloads and related resources.
+
+# Metadata:
+#   template metadata
+
+Parameters:
+  EnvironmentName:
+    Description: Name of the environment to deploy (dev, test, prod, develop, research, etc.).
+    Type: String
+  EnvironmentType:
+    Description: Type of the environment to deploy (shared, owned, dedicated, etc.).
+    Type: String
+    Default: shared
+  VpcId:
+    Description: The VPC id to place the EC2 in.
+    Type: String
+  InstanceName:
+    Description: Name of the EC2 Instance to deploy.
+    Type: String
+    Default: ecs-instance
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+    Description: EC2 Instance type/size. Default is t3.micro.
+  InstanceStorageType:
+    Type: String
+    Default: gp3
+    AllowedValues:
+      - gp3
+      - gp2
+      - io1
+      - io2
+    Description: "Type of the attached EBS volume. Default is gp3."
+  InstanceStorageSize:
+    Type: String
+    Default: 10
+    Description: "The size of the attached EBS volume. Default is 10 GB."
+  ECSAMI:
+    Description: "The Amazon Machine Image ID used for the cluster, leave it as the default value to get the latest AMI"
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+  SSHKey:
+    Type: String
+    Default: test001
+    Description: The SSH key used to access the instance.
+  ASGMaxSize:
+    Description: "Enter the Max Size for the ASG"
+    Type: String
+    Default: 1
+  ASGMinSize:
+    Description: "Enter the Min Size for the ASG"
+    Type: String
+    Default: 1
+  ASGDesiredCapacity:
+    Description: "Enter the desired capacity for the ASG"
+    Type: String
+    Default: 1
+  VPCSubnetIDs:
+    Description: "List the Subnet Ids of the instances"
+    Type: String
+  RDSSecurityGroupId:
+    Description: ID of the RDS security group.
+    Type: String
+  # RDSInstance:
+  #   Description: RDS Instance ID.
+  #   Type: String
+  # RDSEndpointURL:
+  #   Description: RDS Instance URL.
+  #   Type: String
+  RDSPort:
+    Description: Default RDS port number
+    Type: String
+    Default: 3306
+  RedisSecurityGroupId:
+    Description: ID of the Redis security group.
+    Type: String
+  RedisPort:
+    Description: Default Redis port number
+    Type: String
+    Default: 6379
+
+# Rules:
+#   set of rules
+
+# Transform:
+#   set of transforms
+
+Resources:
+  # RDSInstanceSecret:
+  #   Type: AWS::SecretsManager::Secret
+  #   Properties:
+  #     Name: !Sub "environments/${EnvironmentType}/rds/mysql/${EnvironmentName}"
+  #     GenerateSecretString:
+  #       SecretStringTemplate: !Sub '{"username": "${EnvironmentName}", "dbname": "${EnvironmentName}_db", "dbInstanceIdentifier": "${RDSInstance}", "host": "${RDSEndpointURL}", "port": "${RDSPort}"}'
+  #       GenerateStringKey: 'password'
+  #       PasswordLength: 30
+  #       ExcludeCharacters: '"@/'
+  EC2InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "sg",
+          ],
+        ]
+      GroupDescription: "Security group for dedicated environment EC2 Instance"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value:
+            !Join [
+              "-",
+              [
+                !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+                !Select [
+                  4,
+                  !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+                ],
+                "sg",
+              ],
+            ]
+  # Role for the EC2 hosts. This allows the ECS agent on the EC2 hosts
+  # to communciate with the ECS control plane, as well as download the docker
+  # images from ECR to run on your host.
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "instance-role",
+          ],
+        ]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName:
+            !Join [
+              "-",
+              [
+                !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+                !Select [
+                  4,
+                  !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+                ],
+                "ecs-service",
+              ],
+            ]
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ecs:CreateCluster"
+                  - "ecs:DeregisterContainerInstance"
+                  - "ecs:DiscoverPollEndpoint"
+                  - "ecs:Poll"
+                  - "ecs:RegisterContainerInstance"
+                  - "ecs:StartTelemetrySession"
+                  - "ecs:Submit*"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                  - "ecr:GetAuthorizationToken"
+                  - "ecr:BatchGetImage"
+                  - "ecr:GetDownloadUrlForLayer"
+                Resource: "*"
+  # This is an IAM role which authorizes ECS to manage resources on your
+  # account on your behalf, such as updating your load balancer with the
+  # details of where your containers are, so that traffic can reach your
+  # containers.
+  ECSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "ecs-role",
+          ],
+        ]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs.amazonaws.com]
+            Action: ["sts:AssumeRole"]
+      Path: /
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  # Rules which allow ECS to attach network interfaces to instances
+                  # on your behalf in order for awsvpc networking mode to work right
+                  - "ec2:AttachNetworkInterface"
+                  - "ec2:CreateNetworkInterface"
+                  - "ec2:CreateNetworkInterfacePermission"
+                  - "ec2:DeleteNetworkInterface"
+                  - "ec2:DeleteNetworkInterfacePermission"
+                  - "ec2:Describe*"
+                  - "ec2:DetachNetworkInterface"
+
+                  # Rules which allow ECS to update load balancers on your behalf
+                  # with the information sabout how to send traffic to your containers
+                  - "elasticloadbalancing:DeregisterInstancesFromLoadBalancer"
+                  - "elasticloadbalancing:DeregisterTargets"
+                  - "elasticloadbalancing:Describe*"
+                  - "elasticloadbalancing:RegisterInstancesWithLoadBalancer"
+                  - "elasticloadbalancing:RegisterTargets"
+                Resource: "*"
+  # A role used to allow AWS Autoscaling to inspect stats and adjust scaleable targets
+  # on your AWS account
+  AutoscalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "autoscaling-role",
+          ],
+        ]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [application-autoscaling.amazonaws.com]
+            Action: ["sts:AssumeRole"]
+      Path: /
+      Policies:
+        - PolicyName: service-autoscaling
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "application-autoscaling:*"
+                  - "cloudwatch:DescribeAlarms"
+                  - "cloudwatch:PutMetricAlarm"
+                  - "ecs:DescribeServices"
+                  - "ecs:UpdateService"
+                Resource: "*"
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "instance-profile",
+          ],
+        ]
+      Path: /
+      Roles:
+        - !Ref EC2InstanceRole
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref EnvironmentName
+      Tags:
+        - Key: Project
+          Value: test001
+        - Key: Environment
+          Value: !Ref EnvironmentName
+  EC2InstanceLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "launch-template",
+          ],
+        ]
+      LaunchTemplateData:
+        KeyName: !Ref SSHKey
+        DisableApiTermination: false
+        ImageId: !Ref ECSAMI
+        InstanceType: !Ref InstanceType
+        Monitoring:
+          Enabled: false
+        EbsOptimized: true
+        InstanceMarketOptions:
+          MarketType: spot
+        IamInstanceProfile:
+          Arn: !GetAtt EC2InstanceProfile.Arn
+        SecurityGroupIds:
+          - !Ref EC2InstanceSecurityGroup
+        BlockDeviceMappings:
+          - DeviceName: /dev/sda1
+            Ebs:
+              VolumeSize: !Ref InstanceStorageSize
+              VolumeType: !Ref InstanceStorageType
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash -xe
+            echo ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config
+            yum install -y aws-cfn-bootstrap
+            /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource EC2InstanceASG --region ${AWS::Region}
+  EC2InstanceASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName:
+        !Join [
+          "-",
+          [
+            !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+            !Select [
+              4,
+              !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+            ],
+            "asg",
+          ],
+        ]
+      VPCZoneIdentifier: !Split [",", !Ref VPCSubnetIDs]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref EC2InstanceLaunchTemplate
+        Version: 1
+      MinSize: !Ref ASGMinSize
+      MaxSize: !Ref ASGMaxSize
+      DesiredCapacity: !Ref ASGDesiredCapacity
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 420
+      Tags:
+        - Key: Name
+          Value:
+            !Join [
+              "-",
+              [
+                !Sub "${EnvironmentType}-${EnvironmentName}-${InstanceName}",
+                !Select [
+                  4,
+                  !Split ["-", !Select [2, !Split ["/", !Ref AWS::StackId]]],
+                ],
+                "instance",
+              ],
+            ]
+          PropagateAtLaunch: "true"
+        - Key: Project
+          Value: test001
+          PropagateAtLaunch: "true"
+        - Key: Environment
+          Value: !Ref EnvironmentName
+          PropagateAtLaunch: "true"
+  EC2InstanceAllowAccessToRDS:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: !Sub "Allow access from ${EnvironmentName} to RDS."
+      GroupId: !Ref RDSSecurityGroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId: !GetAtt EC2InstanceSecurityGroup.GroupId
+      ToPort: !Ref RDSPort
+      FromPort: !Ref RDSPort
+  EC2InstanceAllowAccessToRedis:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: !Sub "Allow access from ${EnvironmentName} to Redis."
+      GroupId: !Ref RedisSecurityGroupId
+      IpProtocol: tcp
+      SourceSecurityGroupId: !GetAtt EC2InstanceSecurityGroup.GroupId
+      ToPort: !Ref RedisPort
+      FromPort: !Ref RedisPort
+
+Outputs:
+  AutoscalingGroup:
+    Description: "The newly created asg"
+    Value: !Ref EC2InstanceASG
+  LaunchConfig:
+    Description: "the newly created launch config"
+    Value: !Ref EC2InstanceLaunchTemplate
+  # ClusterName:
+  #   Description: The name of the ECS cluster
+  #   Value: !Ref 'ECSCluster'
+  # AutoscalingRole:
+  #   Description: The ARN of the role used for autoscaling
+  #   Value: !GetAtt 'AutoscalingRole.Arn'
+  # ECSRole:
+  #   Description: The ARN of the ECS role
+  #   Value: !GetAtt 'ECSRole.Arn'

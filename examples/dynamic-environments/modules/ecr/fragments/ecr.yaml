@@ -1,0 +1,92 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: This template creates ECR Registry and related resources.
+
+# Metadata:
+#   template metadata
+
+Parameters:
+  EnvironmentName:
+    Description: Name of the environment to deploy (dev, test, prod, develop, research, etc.).
+    Type: String
+  EnvironmentType:
+    Description: Type of the environment to deploy (shared, owned, dedicated, etc.).
+    Type: String
+  AppName:
+    Description: Name of the application to deploy (frontend, backend-nginx, backend-fpm, etc.).
+    Type: String
+
+# Rules:
+#   set of rules
+
+# Mappings:
+#
+
+# Transform:
+#   set of transforms
+
+Resources:
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      ImageTagMutability: MUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      RepositoryName: !Join [
+          "-",
+          [
+            "test001",
+            # !Ref EnvironmentType,
+            !Ref EnvironmentName,
+            !Ref AppName,
+          ],
+        ]
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+              "rules": [
+                  {
+                      "rulePriority": 1,
+                      "description": "Delete untagged images",
+                      "selection": {
+                          "tagStatus": "untagged",
+                          "countType": "imageCountMoreThan",
+                          "countNumber": 1
+                      },
+                      "action": {
+                          "type": "expire"
+                      }
+                  },
+                  {
+                      "rulePriority": 2,
+                      "description": "Store no more than 30 images",
+                      "selection": {
+                          "tagStatus": "any",
+                          "countType": "imageCountMoreThan",
+                          "countNumber": 30
+                      },
+                      "action": {
+                          "type": "expire"
+                      }
+                  }
+              ]
+          }
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: EnvironmentType
+          Value: !Ref EnvironmentType
+# Outputs:
+#   AutoscalingGroup:
+#     Description: "The newly created asg"
+#     Value: !Ref EC2InstanceASG
+#   LaunchConfig:
+#     Description: "the newly created launch config"
+#     Value: !Ref EC2InstanceLaunchTemplate
+#   TargetGroup:
+#     Description: "The newly created TargetGroup"
+#     Value: !Ref EC2TargetGroup
+#   ListenerRule:
+#     Description: "The newly created ListenerRule"
+#     Value: !Ref ALBListenerRule

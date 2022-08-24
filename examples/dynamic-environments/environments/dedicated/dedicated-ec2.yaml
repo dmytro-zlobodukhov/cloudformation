@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Template to create basic infrastructure components that include EC2 Bastion Host
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General
+        Parameters:
+          - EnvironmentName
+          - EnvironmentType
+          - SharedStackName
+          - Route53StackName
+      - Label:
+          default: EC2 Configuration
+        Parameters:
+          - InstanceName
+          - InstanceType
+          - InstanceStorageType
+          - InstanceStorageSize
+          - InstanceOS
+          - SSHKey
+
+Parameters:
+  ########################
+  ###      GENERAL     ###
+  ########################
+  EnvironmentName:
+    Description: Name of the environment to deploy (dev, test, prod, develop, research, etc.).
+    Type: String
+  EnvironmentType:
+    Description: Type of the environment to deploy (shared, owned, dedicated, etc.).
+    Type: String
+    Default: dedicated
+  SharedStackName:
+    Description: The name of the shared stack, where shared resources (ALB, RDS, Redis, VPC, etc.) have been created.
+    Type: String
+    Default: test001-shared-infra
+  Route53StackName:
+    Description: The name of the shared stack, where shared resources (ALB, RDS, Redis, VPC, etc.) have been created.
+    Type: String
+    Default: test001-shared-route53-public-apps
+  ########################
+  ###        EC2       ###
+  ########################
+  InstanceName:
+    Description: Name of the EC2 Instance to deploy.
+    Type: String
+    Default: web
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+    Description: EC2 Instance type/size. Default is t3.micro.
+  InstanceStorageType:
+    Type: String
+    Default: gp3
+    AllowedValues:
+      - gp3
+      - gp2
+      - io1
+      - io2
+    Description: "Type of the attached EBS volume. Default is gp3."
+  InstanceStorageSize:
+    Type: String
+    Default: 10
+    Description: "The size of the attached EBS volume. Default is 10 GB."
+  InstanceOS:
+    Type: String
+    Default: Ubuntu2004
+    AllowedValues:
+      - Ubuntu1804
+      - Ubuntu2004
+    Description: "Desired Operating System. Default is Ubuntu 20.04. Auto installation added for Ubuntu 20.04 only."
+  SSHKey:
+    Type: String
+    Default: test001
+    Description: The SSH key used to access the instance.
+
+Resources:
+  EC2:
+    Type: Test001::EC2::Instance::MODULE
+    Properties:
+      EnvironmentName: !Ref EnvironmentName
+      EnvironmentType: !Ref EnvironmentType
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-VPCID"
+      SubnetId:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-VPCPublicSubnet1"
+      Route53HostedZoneName:
+        Fn::ImportValue:
+          Fn::Sub: "${Route53StackName}-DNSName"
+      InstanceName: !Ref InstanceName
+      InstanceType: !Ref InstanceType
+      InstanceStorageType: !Ref InstanceStorageType
+      InstanceStorageSize: !Ref InstanceStorageSize
+      InstanceOS: !Ref InstanceOS
+      SSHKey: !Ref SSHKey
+      RDSSecurityGroupId:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-RDSSecurityGroup"
+      RedisSecurityGroupId:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-RedisSecurityGroup"

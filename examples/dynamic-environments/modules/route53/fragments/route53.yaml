@@ -1,0 +1,76 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: "This module creates new Route53 hosted zone."
+
+# Metadata:
+#   template metadata
+
+Parameters:
+  VpcId:
+    Description: The VPC id to place Route53 Private zone in (only for private hosted zones).
+    Type: String
+  DomainName:
+    Description: Name of the Route53 hosted zone.
+    Type: String
+  HostedZoneType:
+    Type: String
+    Default: public
+    AllowedValues:
+      - public
+      - private
+    Description: Route53 hosted zone type (public or private). Default is public.
+
+
+# Rules:
+#   set of rules
+
+# Mappings:
+#   set of mappings
+
+Conditions:
+  Route53Public: !Equals [!Ref HostedZoneType, public]
+  Route53Private: !Equals [!Ref HostedZoneType, private]
+
+# Transform:
+#   set of transforms
+
+Resources:
+  Route53Private:
+    Type: AWS::Route53::HostedZone
+    Condition: Route53Private
+    Properties:
+      Name: !Ref DomainName
+      VPCs:
+        - VPCId: !Ref VpcId
+          VPCRegion: !Ref 'AWS::Region'
+
+  Route53Public:
+    Type: AWS::Route53::HostedZone
+    Condition: Route53Public
+    Properties:
+      Name: !Ref DomainName
+
+  ACMCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Condition: Route53Public
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames:
+        - !Sub "*.${DomainName}"
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref Route53Public
+
+Outputs:
+  ACMCertificateArn:
+    Value: !Ref ACMCertificate
+    Condition: Route53Public
+  Route53Public:
+    Condition: Route53Public
+    Value: !Ref Route53Public
+  Route53Private:
+    Condition: Route53Private
+    Value: !Ref Route53Private
+

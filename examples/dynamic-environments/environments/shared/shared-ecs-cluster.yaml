@@ -1,0 +1,165 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Template to create basic infrastructure components that include ECS cluster with EC2 ASG and related resources
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: General
+        Parameters:
+          - EnvironmentName
+          - EnvironmentType
+          - SharedStackName
+          - Route53StackName
+      - Label:
+          default: VPC Configuration
+        Parameters:
+          - VpcId
+      - Label:
+          default: EC2 Configuration
+        Parameters:
+          - InstanceName
+          - InstanceType
+          - InstanceStorageType
+          - InstanceStorageSize
+          - SSHKey
+          - ECSAMI
+      - Label:
+          default: EC2 ASG Configuration
+        Parameters:
+          - ASGMaxSize
+          - ASGMinSize
+          - ASGDesiredCapacity
+Parameters:
+  ########################
+  ###      GENERAL     ###
+  ########################
+  EnvironmentName:
+    Description: Name of the environment to deploy (dev, test, prod, develop, research, etc.).
+    Type: String
+    Default: ecs-cluster
+  EnvironmentType:
+    Description: Type of the environment to deploy (shared, owned, dedicated, etc.).
+    Type: String
+    Default: shared
+  SharedStackName:
+    Description: The name of the shared infra stack, where shared resources (ALB, RDS, Redis, VPC, etc.) have been created.
+    Type: String
+    Default: test001-shared-infra
+  Route53StackName:
+    Description: The name of the DNS stack, where shared resources (Route53) have been created.
+    Type: String
+    Default: test001-shared-route53-public-apps
+  ########################
+  ###        EC2       ###
+  ########################
+  InstanceName:
+    Description: Name of the EC2 Instance to deploy.
+    Type: String
+    Default: worker
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+    Description: EC2 Instance type/size. Default is t3.micro.
+  InstanceStorageType:
+    Type: String
+    Default: gp3
+    AllowedValues:
+      - gp3
+      - gp2
+      - io1
+      - io2
+    Description: "Type of the attached EBS volume. Default is gp3."
+  InstanceStorageSize:
+    Type: String
+    Default: 10
+    Description: "The size of the attached EBS volume. Default is 10 GB."
+  SSHKey:
+    Type: String
+    Default: test001
+    Description: The SSH key used to access the instance.
+  ECSAMI:
+    Description: "The Amazon Machine Image ID used for the cluster, leave it as the default value to get the latest AMI"
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ecs/optimized-ami/amazon-linux/recommended/image_id
+  ########################
+  ###      EC2 ASG     ###
+  ########################
+  ASGMaxSize:
+    Description: "Enter the Max Size for the ASG"
+    Type: String
+    Default: 10
+  ASGMinSize:
+    Description: "Enter the Min Size for the ASG"
+    Type: String
+    Default: 1
+  ASGDesiredCapacity:
+    Description: "Enter the desired capacity for the ASG"
+    Type: String
+    Default: 1
+
+Resources:
+  ECS:
+    Type: Test001::ECS::ClusterEC2::MODULE
+    Properties:
+      EnvironmentName: !Ref EnvironmentName
+      EnvironmentType: !Ref EnvironmentType
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-VPCID"
+      VPCSubnetIDs:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-VPCPrivateSubnets"
+      # ALBListenerARN:
+      #   Fn::ImportValue:
+      #     Fn::Sub: "${SharedStackName}-HTTPSListenerArn"
+      # ALBListenerRulePriority: !Ref ALBListenerRulePriority
+      InstanceName: !Ref InstanceName
+      InstanceType: !Ref InstanceType
+      InstanceStorageType: !Ref InstanceStorageType
+      InstanceStorageSize: !Ref InstanceStorageSize
+      ECSAMI: !Ref ECSAMI
+      SSHKey: !Ref SSHKey
+      ASGMaxSize: !Ref ASGMaxSize
+      ASGMinSize: !Ref ASGMinSize
+      ASGDesiredCapacity: !Ref ASGDesiredCapacity
+      Route53HostedZoneName:
+        Fn::ImportValue:
+          Fn::Sub: "${Route53StackName}-DNSName"
+      RDSInstance:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-RDSInstance"
+      RDSEndpointURL:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-RDSEndpointURL"
+      RDSSecurityGroupId:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-RDSSecurityGroup"
+      RedisSecurityGroupId:
+        Fn::ImportValue:
+          Fn::Sub: "${SharedStackName}-RedisSecurityGroup"
+
+Outputs:
+  ECSClusterName:
+    Description: The name of the ECS cluster
+    Value: !Ref EnvironmentName
+    Export:
+      Name: !Sub "${AWS::StackName}-ECSClusterName"
+  ECSRole:
+    Description: ARN of the IAM role for ECS Service
+    Value: !Ref ECS.ECSRole
+    Export:
+      Name: !Sub "${AWS::StackName}-ECSRole"
+  ECSAutoscalingRole:
+    Description: ARN of the IAM role for Application Autoscaling
+    Value: !Ref ECS.AutoscalingRole
+    Export:
+      Name: !Sub "${AWS::StackName}-ECSAutoscalingRole"
+  ECSSecurityGroup:
+    Description: ECS Instances security group name
+    Value: !Ref ECS.EC2InstanceSecurityGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-ECSSecurityGroup"

@@ -1,0 +1,200 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This template creates RDS instance configuration.
+Parameters:
+  EnvironmentName:
+    Description: Name of environment to deploy
+    Type: String
+    Default: 'shared'
+  NumberOfAZs:
+    Description: Number of Availability Zones
+    Type: Number
+    Default: 2
+  DBName:
+    Description: The database name
+    Type: String
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  # DBUser:
+  #   Description: The database admin account username
+  #   Type: String
+  #   MinLength: '1'
+  #   MaxLength: '16'
+  #   NoEcho: 'true'
+  #   AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+  #   ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  # DBPassword:
+  #   Description: The database admin account password
+  #   Type: String
+  #   NoEcho: 'true'
+  #   MinLength: '8'
+  #   MaxLength: '41'
+  DBVpcId:
+    Description: The VPC id to place the DB in.
+    Type: String
+  DBSubnet1:
+    Description: The VPC subnet to add to the db subnet group.
+    Type: String
+  DBSubnet2:
+    Description: The VPC subnet to add to the db subnet group.
+    Type: String
+  DBSubnet3:
+    Description: The VPC subnet to add to the db subnet group.
+    Type: String
+  # SourceSecurityGroupId:
+  #   Description: Security group to allow traffic from.
+  #   Type: String
+  AllocatedStorage:
+    Description: The min storage to create the RDS with.
+    Type: Number
+    Default: 20
+  MaxAllocatedStorage:
+    Description: The maximum storage RDS will be able to scale out to.
+    Type: Number
+    Default: 100
+  DBInstanceClass:
+    Description: The size/type of the DB instance.
+    Type: String
+    Default: db.t3.small
+  DBEngine:
+    Description: DB engine.
+    Type: String
+    Default: 'MySQL'
+  DBEngineVersion:
+    Description: Version of DB engine.
+    Type: String
+    Default: 8.0.28
+  AutoMinorVersionUpgrade:
+    Description: A value that indicates whether minor engine upgrades are applied automatically to the DB instance during the maintenance window.
+    Type: String
+    Default: true
+  AllowMajorVersionUpgrade:
+    Description: A value that indicates whether major version upgrades are allowed.
+    Type: String
+    Default: false
+  BackupRetentionPeriod:
+    Description: The number of days for which automated backups are retained.
+    Type: Number
+    Default: 2
+  DBInstanceIdentifier:
+    Description: A name for the DB instance.
+    Type: String
+    Default: 'db-instance'
+  DeletionProtection:
+    Description: A value that indicates whether the DB cluster has deletion protection enabled.
+    Type: String
+    Default: false
+  EnableCloudwatchLogsExports:
+    Description: The list of log types that need to be enabled for exporting to CloudWatch Logs. Valid values are audit, error, general, slowquery.
+    Type: CommaDelimitedList
+    Default: "error"
+  EnableIAMDatabaseAuthentication:
+    Description: A value that indicates whether to enable mapping of AWS Identity and Access Management (IAM) accounts to database accounts.
+    Type: String
+    Default: true
+  PreferredBackupWindow:
+    Description: The daily time range during which automated backups are created.
+    Type: String
+    Default: "02:30-03:30"
+  PreferredMaintenanceWindow:
+    Description: The weekly time range during which system maintenance can occur, in Universal Coordinated Time (UTC).
+    Type: String
+    Default: "sun:23:30-mon:00:30"
+  StorageEncrypted:
+    Description: Indicates whether the DB cluster is encrypted.
+    Type: String
+    Default: true
+  DBParameterGroupFamily:
+    Description: The DB parameter group family name.
+    Type: String
+    Default: mysql8.0
+  # DBPort:
+  #   Description: Port of the DB instance.
+  #   Type: Number
+  #   Default: 3306
+  StorageType:
+    Description: Specifies the storage type to be associated with the DB instance. Valid values are standard, gp2, io1
+    Type: String
+    Default: 'gp2'
+
+Conditions:
+  # OneAvailabilityZone: !Or [!Equals [!Ref NumberOfAZs, 1], !Equals [!Ref NumberOfAZs, 2], !Equals [!Ref NumberOfAZs, 3]]
+  TwoAvailabilityZones: !Or [!Equals [!Ref NumberOfAZs, 2], !Equals [!Ref NumberOfAZs, 3]]
+  ThreeAvailabilityZones: !Equals [!Ref NumberOfAZs, 3]
+
+Resources:
+  RDSInstanceSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "dbadmin"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 30
+        ExcludeCharacters: '"@/'
+  RDSInstanceSecretAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref RDSInstanceSecret
+      TargetId: !Ref RDSInstance
+      TargetType: AWS::RDS::DBInstance
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: !Ref AllocatedStorage
+      MaxAllocatedStorage: !Ref MaxAllocatedStorage
+      StorageType: !Ref StorageType
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: !Ref DBEngine
+      EngineVersion: !Ref DBEngineVersion
+      # MasterUsername: !Ref 'DBUser'
+      # MasterUserPassword: !Ref 'DBPassword'
+      MasterUsername: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSInstanceSecret, ':SecretString:username}}' ]]
+      MasterUserPassword: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSInstanceSecret, ':SecretString:password}}' ]]
+      AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
+      AllowMajorVersionUpgrade: !Ref AllowMajorVersionUpgrade
+      BackupRetentionPeriod: !Ref BackupRetentionPeriod
+      DBInstanceIdentifier: !Join ['-', [!Ref DBInstanceIdentifier, !Ref EnvironmentName, '001']]
+      DBName: !Ref 'DBName'
+      DBParameterGroupName: !Ref RDSParameterGroup
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      DeletionProtection: !Ref DeletionProtection
+      EnableCloudwatchLogsExports: !Ref EnableCloudwatchLogsExports
+      EnableIAMDatabaseAuthentication: !Ref EnableIAMDatabaseAuthentication
+      PreferredBackupWindow: !Ref PreferredBackupWindow
+      PreferredMaintenanceWindow: !Ref PreferredMaintenanceWindow
+      StorageEncrypted: !Ref StorageEncrypted
+      VPCSecurityGroups:
+        - !GetAtt RDSSecurityGroup.GroupId
+  RDSParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Family: !Ref DBParameterGroupFamily
+      Description: !Sub 'Database parameter group for ${DBInstanceIdentifier}-${EnvironmentName}-001'
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Join ['-', ['Database subnet group for ', !Ref DBInstanceIdentifier, !Ref EnvironmentName, '001']]
+      DBSubnetGroupName: !Join ['-', [!Ref DBInstanceIdentifier, !Ref EnvironmentName, '001']]
+      SubnetIds:
+      - !Ref DBSubnet1
+      - !If [TwoAvailabilityZones, !Ref DBSubnet2, !Ref DBSubnet1]
+      - !If [ThreeAvailabilityZones, !Ref DBSubnet3, !Ref DBSubnet1]
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref DBVpcId
+      GroupName: !Join ['-', [!Ref DBInstanceIdentifier, !Ref EnvironmentName, '001']]
+      GroupDescription: Allow connections to DB
+      Tags:
+        - Key: Name
+          Value: !Join ['-', [!Ref DBInstanceIdentifier, !Ref EnvironmentName, '001']]
+      # SecurityGroupIngress:
+      # - IpProtocol: tcp
+      #   FromPort: !Ref DBPort
+      #   ToPort: !Ref DBPort
+      #   SourceSecurityGroupId: !Ref SourceSecurityGroupId
+Outputs:
+  DBEndpointAddress:
+    Description: 'The database endpoint.'
+    Value: !GetAtt RDSInstance.Endpoint.Address

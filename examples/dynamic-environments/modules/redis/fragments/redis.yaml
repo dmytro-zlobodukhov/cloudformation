@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This template creates ElastiCache Redis cluster and related resources.
+Parameters:
+  EnvironmentName:
+    Description: Name of environment to deploy.
+    Type: String
+    Default: shared
+  NumberOfAZs:
+    Description: Number of Availability Zones
+    Type: Number
+    Default: 2
+  RedisIdentifier:
+    Description: Name of Redis.
+    Type: String
+    Default: redis
+  RedisDescription:
+    Description: A user-created description for the replication group.
+    Type: String
+    Default: Redis cluster.
+  VpcId:
+    Description: The VPC id to place the ELB in.
+    Type: String
+  PrivateSubnet1:
+    Description: The VPC subnet to place the Redis cluster in.
+    Type: String
+  PrivateSubnet2:
+    Description: The VPC subnet to place the Redis cluster in.
+    Type: String
+  PrivateSubnet3:
+    Description: The VPC subnet to place the Redis cluster in.
+    Type: String
+    Default: ""
+  SourceSecurityGroupId:
+    Description: Security group to allow traffic from.
+    Type: String
+  AutomaticFailoverEnabled:
+    Description: Specifies whether a read-only replica is automatically promoted to read/write primary if the existing primary fails.
+    Type: String
+    Default: false
+  AtRestEncryptionEnabled:
+    Description: A flag that enables encryption at rest when set to true.
+    Type: String
+    Default: true
+  AutoMinorVersionUpgrade:
+    Description: If you are running Redis engine version 6.0 or later, set this parameter to yes if you want to opt-in to the next minor version upgrade campaign. This parameter is disabled for previous versions.
+    Type: String
+    Default: false
+  CacheNodeType:
+    Description: The compute and memory capacity of the nodes in the node group (shard).
+    Type: String
+    Default: cache.t3.small
+  EngineVersion:
+    Description: Version of Redis.
+    Type: String
+    Default: 5.0.6
+  CacheParameterGroupFamily:
+    Description: The name of the cache parameter group family that this cache parameter group is compatible with.
+    Type: String
+    Default: redis5.0
+  MultiAZEnabled:
+    Description: A flag indicating if you have Multi-AZ enabled to enhance fault tolerance.
+    Type: String
+    Default: false
+  NumCacheClusters:
+    Description: The number of clusters this replication group initially has.
+    Type: Number
+    Default: 1
+  Port:
+    Description: The port number on which each member of the replication group accepts connections.
+    Type: Number
+    Default: 6379
+  PreferredMaintenanceWindow:
+    Description: Specifies the weekly time range during which maintenance on the cluster is performed.
+    Type: String
+    Default: "sun:23:30-mon:00:30"
+  SnapshotRetentionLimit:
+    Description: The number of days for which ElastiCache retains automatic snapshots before deleting them.
+    Type: Number
+    Default: 2
+  SnapshotWindow:
+    Description: The daily time range (in UTC) during which ElastiCache begins taking a daily snapshot of your node group (shard).
+    Type: String
+    Default: "02:30-03:30"
+  TransitEncryptionEnabled:
+    Description: A flag that enables in-transit encryption when set to true.
+    Type: String
+    Default: true
+  Engine:
+    Description: The name of the cache engine to be used for this cluster. Valid values for this parameter are memcached, redis
+    Type: String
+    Default: Redis
+
+Conditions:
+  OneAvailabilityZone: !Or [!Equals [!Ref NumberOfAZs, 1], !Equals [!Ref NumberOfAZs, 2], !Equals [!Ref NumberOfAZs, 3]]
+  TwoAvailabilityZones: !Or [!Equals [!Ref NumberOfAZs, 2], !Equals [!Ref NumberOfAZs, 3]]
+  ThreeAvailabilityZones: !Equals [!Ref NumberOfAZs, 3]
+
+Resources:
+  ReplicationGroup:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      AutomaticFailoverEnabled: !Ref AutomaticFailoverEnabled
+      AtRestEncryptionEnabled: !Ref AtRestEncryptionEnabled
+      AutoMinorVersionUpgrade: !Ref AutoMinorVersionUpgrade
+      CacheNodeType: !Ref CacheNodeType
+      CacheParameterGroupName: !Ref ParameterGroup
+      CacheSubnetGroupName: !Ref SubnetGroup
+      Engine: !Ref Engine
+      EngineVersion: !Ref EngineVersion
+      MultiAZEnabled: !Ref MultiAZEnabled
+      NumCacheClusters: !Ref NumCacheClusters
+      Port: !Ref Port
+      PreferredMaintenanceWindow: !Ref PreferredMaintenanceWindow
+      ReplicationGroupDescription: !Ref RedisDescription
+      ReplicationGroupId: !Sub '${RedisIdentifier}-${EnvironmentName}-001'
+      SecurityGroupIds:
+      - !GetAtt SecurityGroup.GroupId
+      SnapshotRetentionLimit: !Ref SnapshotRetentionLimit
+      SnapshotWindow: !Ref SnapshotWindow
+      TransitEncryptionEnabled: !Ref TransitEncryptionEnabled
+
+  ParameterGroup:
+    Type: AWS::ElastiCache::ParameterGroup
+    Properties:
+      CacheParameterGroupFamily: !Ref CacheParameterGroupFamily
+      Description: !Sub 'Parameter Group for Redis cluster: ${EngineVersion}'
+
+  SubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      CacheSubnetGroupName: !Sub '${RedisIdentifier}-${EnvironmentName}-001'
+      Description: 'Subnet group'
+      SubnetIds:
+      - !Ref PrivateSubnet1
+      - !If [TwoAvailabilityZones, !Ref PrivateSubnet2, !Ref PrivateSubnet1]
+      - !If [ThreeAvailabilityZones, !Ref PrivateSubnet3, !Ref PrivateSubnet1]
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VpcId
+      GroupName: !Sub '${RedisIdentifier}-${EnvironmentName}-001'
+      GroupDescription: Allow connections to Redis
+      Tags:
+        - Key: Name
+          Value: !Sub '${RedisIdentifier}-${EnvironmentName}-001'
+      # SecurityGroupIngress:
+      # - IpProtocol: tcp
+      #   FromPort: !Ref Port
+      #   ToPort: !Ref Port
+      #   SourceSecurityGroupId: !Ref SourceSecurityGroupId
