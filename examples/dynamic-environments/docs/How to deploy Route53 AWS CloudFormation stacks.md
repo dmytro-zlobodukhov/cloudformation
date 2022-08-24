@@ -21,7 +21,7 @@ Select `Template is Ready`, then select `Upload a template file`, press `Choose 
 
 As all the `CloudFormation` modules and stacks are located in the `dynamic-environments` folder, we need to go to this folder and select the following file: ` dynamic-environments/environments/shared/shared-route53.yaml`
 
-You also can check the stack file in the GitHub repo: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/environments/shared/shared-route53.yaml)
+You also can check the stack file in the GitHub repo: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/environments/shared/shared-route53.yaml)
 
 ![](images/How%20to%20deploy%20Route53%20AWS%20CloudFormation%20stacks/B4F6D343-2A2A-438E-9472-2288D30B8F10%20Large.jpeg)
 
@@ -54,9 +54,9 @@ Press `Next` and set other `CloudFormation` parameters as needed. On the last sc
 
 
 The stack will deploy the following resources:
-* `Route53 Public` Hosted Zone (all the details you can find in the CloudFormation Route53 module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/modules/route53/fragments/route53.yaml))
+* `Route53 Public` Hosted Zone (all the details you can find in the CloudFormation Route53 module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/modules/route53/fragments/route53.yaml))
 	* Public Hosted zone
 	* Wildcard ACM Certificate for the specified domain name
-* If selected/needed, `Route53 Private` Hosted Zone (all the details you can find in the CloudFormation Route53 module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/modules/route53/fragments/route53.yaml))
+* If selected/needed, `Route53 Private` Hosted Zone (all the details you can find in the CloudFormation Route53 module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/modules/route53/fragments/route53.yaml))
 	* Private Hosted zone associated with the VPC (VPC must be in place)
 

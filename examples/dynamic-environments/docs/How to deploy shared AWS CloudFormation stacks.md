@@ -20,7 +20,7 @@ Select `Template is Ready`, then select `Upload a template file`, press `Choose 
 
 As all the `CloudFormation` modules and stacks are located in the `dynamic-environments` folder, we need to go to this folder and select the following file: ` dynamic-environments/environments/shared/shared.yaml`
 
-You also can check the stack file in the GitHub repo: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/environments/shared/shared.yaml)
+You also can check the stack file in the GitHub repo: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/environments/shared/shared.yaml)
 
 ![](images/How%20to%20deploy%20shared%20AWS%20CloudFormation%20stacks/32042F5B-9B24-4958-945C-DFF98EE918B9%20Large.jpeg)
 
@@ -63,22 +63,22 @@ Press `Next` and set other `CloudFormation` parameters as needed. On the last sc
 Let’s say you set all the parameters and selected two availability zones.
 
 The stack will deploy the following resources:
-* AWS VPC Network with specified CIDR and networking-related resources (all the details you can find in the CloudFormation VPC module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/modules/vpc/fragments/vpc.yaml))
+* AWS VPC Network with specified CIDR and networking-related resources (all the details you can find in the CloudFormation VPC module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/modules/vpc/fragments/vpc.yaml))
 	* Two public subnets + Public routing table + Routing table association with Public subnets
 	* Two private subnets + Private routing table + Routing table association with private subnets
 	* One Internet gateway + gateway attachment
 	* Two NAT gateways + ElasticIP for each NAT gateway
 	* Two private subnets for databases + routing table + routing table association with database subnets
-* RDS Database instance for MySQL + all related resources (all the details you can find in the CloudFormation RDS module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/modules/rds/fragments/rds.yaml))
+* RDS Database instance for MySQL + all related resources (all the details you can find in the CloudFormation RDS module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/modules/rds/fragments/rds.yaml))
 	* AWS Secrets Manager secret for RDS MySQL admin user without rotation configuration
 	* RDS Parameter Group
 	* RDS Subnet Group + RDS Security Group
 	* Two days snapshot retention
-* Elasticache instance for Redis + all related resources (all the details you can find in the CloudFormation Redis module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/modules/redis/fragments/redis.yaml))
+* Elasticache instance for Redis + all related resources (all the details you can find in the CloudFormation Redis module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/modules/redis/fragments/redis.yaml))
 	* Redis Parameter Group
 	* Redis Subnet Group + Redis Security Group
 	* Two days snapshot retention
-* Application Load Balancer + all related resources (all the details you can find in the CloudFormation ALB module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/modules/alb/fragments/alb.yaml))
+* Application Load Balancer + all related resources (all the details you can find in the CloudFormation ALB module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/modules/alb/fragments/alb.yaml))
 	* HTTP Listener with redirection to HTTPS + HTTPS Listener with attached ACM Certificate and fixed-response rule
 	* ALB Security Group + Ingress rules
 	* Wildcard Alias record in Route53

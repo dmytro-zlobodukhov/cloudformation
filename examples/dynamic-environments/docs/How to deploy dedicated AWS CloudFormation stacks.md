@@ -17,7 +17,7 @@ Select `Template is Ready`, then select `Upload a template file`, press `Choose 
 
 As all the `CloudFormation` modules and stacks are located in the ` dynamic-environments` folder, we need to go to this folder and select the following file: ` dynamic-environments/environments/dedicated/dedicated-ec2-asg.yaml`
 
-You also can check the stack file in the GitHub repo: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/environments/dedicated/dedicated-ec2-asg.yaml)
+You also can check the stack file in the GitHub repo: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/environments/dedicated/dedicated-ec2-asg.yaml)
 
 ![](images/How%20to%20deploy%20dedicated%20AWS%20CloudFormation%20stacks/026F5A9C-9898-4A89-B964-C9D2C16F1F0D%20Large.jpeg)
 
@@ -26,11 +26,11 @@ NOTE
 
 For deployment of standalone EC2 instances, use the `dedicated-ec2.yaml` stack (it is pretty similar but does not create an Auto-Scaling Group and Target Group and does not need an ALB).
 
-You also can check the stack file in the GitHub repo: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/environments/dedicated/dedicated-ec2.yaml)
+You also can check the stack file in the GitHub repo: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/environments/dedicated/dedicated-ec2.yaml)
 
 For example, if you want to deploy a single-node bastion host (a VPN server).
 
-Example of the Bastion Host can be found here: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/environments/shared/shared-bastion.yaml)
+Example of the Bastion Host can be found here: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/environments/shared/shared-bastion.yaml)
 - - - -
 
 Then, you need to set the `Stack name` parameter.
@@ -70,15 +70,15 @@ Press `Next` and set other `CloudFormation` parameters as needed. On the last sc
 
 
 The stack will deploy the following resources:
-* EC2 Instance inside the Auto-Scaling Group and all related resources (all the details you can find in the CloudFormation EC2-ASG module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/modules/ec2-asg/fragments/ec2.yaml))
+* EC2 Instance inside the Auto-Scaling Group and all related resources (all the details you can find in the CloudFormation EC2-ASG module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/modules/ec2-asg/fragments/ec2.yaml))
 	* AWS Secrets Manager secret for RDS MySQL dedicated environment user without rotation configuration
 	* EC2 Instance Profile + EC2 Instance Role + EC2 Instance Role Policies (permissions to Parameter Store, Secrets Manager, S3, ECR, )
 	* EC2 Launch Template + User Data
-		* The script in the User Data installs all necessary software, deploys a placeholder container for health checks, runs the Ansible playbook which created the RDS database and RDS user, and provides permissions for this user to the newly created RDS database (you can find it here: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/helpers/ansible/mysql.yaml)).
+		* The script in the User Data installs all necessary software, deploys a placeholder container for health checks, runs the Ansible playbook which created the RDS database and RDS user, and provides permissions for this user to the newly created RDS database (you can find it here: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/helpers/ansible/mysql.yaml)).
 	* EC2 Security Group + necessary Ingress rules
 	* Target Group + ALB rule for the dedicated environment
 	* Ingress rule in the RDS and Redis security groups to allow access from the EC2 security group
-* ECR repositories (all the details you can find in the CloudFormation ECR module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/modules/ecr/fragments/ecr.yaml))
+* ECR repositories (all the details you can find in the CloudFormation ECR module: [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/modules/ecr/fragments/ecr.yaml))
 	* ECR repo for the backend for PHP FPM app + lifecycle policy
 	* ECR repo for the backend PHP Nginx app + lifecycle policy
 	* ECR repo for the frontend app + lifecycle policy

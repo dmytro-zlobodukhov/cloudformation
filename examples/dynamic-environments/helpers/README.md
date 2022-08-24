@@ -4,4 +4,4 @@ Here you can find some helpers, that are currently under development. These help
 
 | name | type | description | link |
 |---|---|---|---|
-| ansible/mysql.yaml | Ansible playbook | It is used to provision MySQL user and database during the environment creation. | [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/dynamic-environments/modules/ec2-asg/fragments/ec2.yaml#L469-L470) |
+| ansible/mysql.yaml | Ansible playbook | It is used to provision MySQL user and database during the environment creation. | [Link](https://github.com/dmytro-zlobodukhov/cloudformation/blob/main/examples/dynamic-environments/modules/ec2-asg/fragments/ec2.yaml#L469-L470) |
