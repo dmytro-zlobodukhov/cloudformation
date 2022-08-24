@@ -1,7 +1,7 @@
 [Back to the menu](../README.md)
 
 All the modules in the directory are just small chunks (separate AWS services).
-They are combined into stacks. You can find all stacks templates [here](https://github.com/dmytro-zlobodukhov/cloudformation/tree/main/dynamic-environments/environments).
+They are combined into stacks. You can find all stacks templates [here](https://github.com/dmytro-zlobodukhov/cloudformation/tree/main/examples/dynamic-environments/environments).
 
 ---
 
